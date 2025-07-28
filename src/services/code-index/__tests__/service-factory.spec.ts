@@ -336,6 +336,7 @@ describe("CodeIndexServiceFactory", () => {
 				vertexAIOptions: {
 					vertexProjectId: "test-project",
 					vertexRegion: "us-central1",
+					vertexJsonCredentials: "test-credentials",
 				},
 			}
 			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
@@ -348,6 +349,7 @@ describe("CodeIndexServiceFactory", () => {
 				{
 					vertexProjectId: "test-project",
 					vertexRegion: "us-central1",
+					vertexJsonCredentials: "test-credentials",
 				},
 				undefined,
 			)
@@ -907,6 +909,7 @@ describe("CodeIndexServiceFactory", () => {
 				vertexAIOptions: {
 					vertexProjectId: "test-project",
 					vertexRegion: "us-central1",
+					vertexJsonCredentials: "test-credentials",
 				},
 			}
 			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
