@@ -3,6 +3,7 @@ import { fileExistsAtPath } from "../../utils/fs"
 import fs from "fs/promises"
 import ignore, { Ignore } from "ignore"
 import * as vscode from "vscode"
+import { createRooignoreInstance, findIgnoreFiles } from "../../services/glob/shared-ignore-utils"
 
 export const LOCK_TEXT_SYMBOL = "\u{1F512}"
 
@@ -16,6 +17,7 @@ export class RooIgnoreController {
 	private ignoreInstance: Ignore
 	private disposables: vscode.Disposable[] = []
 	rooIgnoreContent: string | undefined
+	private rooIgnoreFiles: string[] = []
 
 	constructor(cwd: string) {
 		this.cwd = cwd
@@ -34,10 +36,11 @@ export class RooIgnoreController {
 	}
 
 	/**
-	 * Set up the file watcher for .rooignore changes
+	 * Set up the file watcher for .rooignore changes at any level
 	 */
 	private setupFileWatcher(): void {
-		const rooignorePattern = new vscode.RelativePattern(this.cwd, ".rooignore")
+		// Watch for .rooignore files anywhere in the workspace
+		const rooignorePattern = new vscode.RelativePattern(this.cwd, "**/.rooignore")
 		const fileWatcher = vscode.workspace.createFileSystemWatcher(rooignorePattern)
 
 		// Watch for changes and updates
@@ -58,18 +61,21 @@ export class RooIgnoreController {
 	}
 
 	/**
-	 * Load custom patterns from .rooignore if it exists
+	 * Load custom patterns from .rooignore files at any level
 	 */
 	private async loadRooIgnore(): Promise<void> {
 		try {
 			// Reset ignore instance to prevent duplicate patterns
 			this.ignoreInstance = ignore()
-			const ignorePath = path.join(this.cwd, ".rooignore")
-			if (await fileExistsAtPath(ignorePath)) {
-				const content = await fs.readFile(ignorePath, "utf8")
+
+			// Find all .rooignore files from current directory up to root
+			this.rooIgnoreFiles = await findIgnoreFiles(this.cwd, ".rooignore")
+
+			if (this.rooIgnoreFiles.length > 0) {
+				// Use the shared utility to create ignore instance and get combined content
+				const { ignoreInstance, content } = await createRooignoreInstance(this.cwd)
+				this.ignoreInstance = ignoreInstance
 				this.rooIgnoreContent = content
-				this.ignoreInstance.add(content)
-				this.ignoreInstance.add(".rooignore")
 			} else {
 				this.rooIgnoreContent = undefined
 			}
@@ -196,6 +202,11 @@ export class RooIgnoreController {
 			return undefined
 		}
 
-		return `# .rooignore\n\n(The following is provided by a root-level .rooignore file where the user has specified files and directories that should not be accessed. When using list_files, you'll notice a ${LOCK_TEXT_SYMBOL} next to files that are blocked. Attempting to access the file's contents e.g. through read_file will result in an error.)\n\n${this.rooIgnoreContent}\n.rooignore`
+		const fileLocationInfo =
+			this.rooIgnoreFiles.length === 1
+				? `${this.rooIgnoreFiles.length === 1 && this.rooIgnoreFiles[0] === path.join(this.cwd, ".rooignore") ? "root-level" : "multi-level"} .rooignore file${this.rooIgnoreFiles.length > 1 ? "s" : ""}`
+				: `${this.rooIgnoreFiles.length} .rooignore files at different levels`
+
+		return `# .rooignore\n\n(The following is provided by ${fileLocationInfo} where the user has specified files and directories that should not be accessed. When using list_files, you'll notice a ${LOCK_TEXT_SYMBOL} next to files that are blocked. Attempting to access the file's contents e.g. through read_file will result in an error.)\n\n${this.rooIgnoreContent}\n.rooignore`
 	}
 }

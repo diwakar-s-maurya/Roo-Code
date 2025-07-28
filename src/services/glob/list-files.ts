@@ -7,6 +7,7 @@ import ignore from "ignore"
 import { arePathsEqual } from "../../utils/path"
 import { getBinPath } from "../../services/ripgrep"
 import { DIRS_TO_IGNORE } from "./constants"
+import { createGitignoreInstance } from "./shared-ignore-utils"
 
 /**
  * List files in a directory, with optional recursive traversal
@@ -245,60 +246,10 @@ function buildNonRecursiveArgs(): string[] {
 
 /**
  * Create an ignore instance that handles .gitignore files properly
- * This replaces the custom gitignore parsing with the proper ignore library
+ * This uses the shared ignore utilities for consistent behavior
  */
 async function createIgnoreInstance(dirPath: string): Promise<ReturnType<typeof ignore>> {
-	const ignoreInstance = ignore()
-	const absolutePath = path.resolve(dirPath)
-
-	// Find all .gitignore files from the target directory up to the root
-	const gitignoreFiles = await findGitignoreFiles(absolutePath)
-
-	// Add patterns from all .gitignore files
-	for (const gitignoreFile of gitignoreFiles) {
-		try {
-			const content = await fs.promises.readFile(gitignoreFile, "utf8")
-			ignoreInstance.add(content)
-		} catch (err) {
-			// Continue if we can't read a .gitignore file
-			console.warn(`Error reading .gitignore at ${gitignoreFile}: ${err}`)
-		}
-	}
-
-	// Always ignore .gitignore files themselves
-	ignoreInstance.add(".gitignore")
-
-	return ignoreInstance
-}
-
-/**
- * Find all .gitignore files from the given directory up to the workspace root
- */
-async function findGitignoreFiles(startPath: string): Promise<string[]> {
-	const gitignoreFiles: string[] = []
-	let currentPath = startPath
-
-	// Walk up the directory tree looking for .gitignore files
-	while (currentPath && currentPath !== path.dirname(currentPath)) {
-		const gitignorePath = path.join(currentPath, ".gitignore")
-
-		try {
-			await fs.promises.access(gitignorePath)
-			gitignoreFiles.push(gitignorePath)
-		} catch {
-			// .gitignore doesn't exist at this level, continue
-		}
-
-		// Move up one directory
-		const parentPath = path.dirname(currentPath)
-		if (parentPath === currentPath) {
-			break // Reached root
-		}
-		currentPath = parentPath
-	}
-
-	// Return in reverse order (root .gitignore first, then more specific ones)
-	return gitignoreFiles.reverse()
+	return await createGitignoreInstance(dirPath)
 }
 
 /**

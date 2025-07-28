@@ -7,10 +7,12 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { fileExistsAtPath } from "../../../utils/fs"
+import { findIgnoreFiles, createRooignoreInstance } from "../../../services/glob/shared-ignore-utils"
 
 // Mock dependencies
 vi.mock("fs/promises")
 vi.mock("../../../utils/fs")
+vi.mock("../../../services/glob/shared-ignore-utils")
 
 // Mock vscode
 vi.mock("vscode", () => {
@@ -46,6 +48,8 @@ describe("RooIgnoreController", () => {
 	let mockFileExists: Mock<typeof fileExistsAtPath>
 	let mockReadFile: Mock<typeof fs.readFile>
 	let mockWatcher: any
+	let mockFindIgnoreFiles: Mock<typeof findIgnoreFiles>
+	let mockCreateRooignoreInstance: Mock<typeof createRooignoreInstance>
 
 	beforeEach(() => {
 		// Reset mocks
@@ -66,6 +70,24 @@ describe("RooIgnoreController", () => {
 		mockFileExists = fileExistsAtPath as Mock<typeof fileExistsAtPath>
 		mockReadFile = fs.readFile as Mock<typeof fs.readFile>
 
+		// Setup shared ignore utils mocks
+		mockFindIgnoreFiles = vi.mocked(findIgnoreFiles)
+		mockCreateRooignoreInstance = vi.mocked(createRooignoreInstance)
+
+		// Set default mock implementations
+		mockFindIgnoreFiles.mockResolvedValue([])
+		mockCreateRooignoreInstance.mockResolvedValue({
+			ignoreInstance: {
+				ignores: vi.fn().mockReturnValue(false),
+				add: vi.fn(),
+				filter: vi.fn(),
+				createFilter: vi.fn(),
+				test: vi.fn(),
+				checkIgnore: vi.fn(),
+			} as any,
+			content: undefined,
+		})
+
 		// Create controller
 		controller = new RooIgnoreController(TEST_CWD)
 	})
@@ -74,34 +96,69 @@ describe("RooIgnoreController", () => {
 		/**
 		 * Tests the controller initialization when .rooignore exists
 		 */
-		it("should load .rooignore patterns on initialization when file exists", async () => {
-			// Setup mocks to simulate existing .rooignore file
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules\n.git\nsecrets.json")
+		it("should load .rooignore patterns on initialization when files exist at multiple levels", async () => {
+			// Setup mocks to simulate .rooignore files at different levels
+			const rooignoreFiles = [path.join(TEST_CWD, ".rooignore"), path.join(TEST_CWD, "subfolder", ".rooignore")]
+
+			mockFindIgnoreFiles.mockResolvedValue(rooignoreFiles)
+
+			// Mock the ignore instance and content from createRooignoreInstance
+			const mockIgnoreInstance = {
+				ignores: vi.fn((filePath: string) => {
+					return (
+						filePath.includes("node_modules") ||
+						filePath.includes(".git") ||
+						filePath === "secrets.json" ||
+						filePath.includes("temp")
+					)
+				}),
+				add: vi.fn(),
+				filter: vi.fn(),
+				createFilter: vi.fn(),
+				test: vi.fn(),
+				checkIgnore: vi.fn(),
+			} as any
+
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: mockIgnoreInstance,
+				content: "node_modules\n.git\nsecrets.json\ntemp",
+			})
 
 			// Initialize controller
 			await controller.initialize()
 
-			// Verify file was checked and read
-			expect(mockFileExists).toHaveBeenCalledWith(path.join(TEST_CWD, ".rooignore"))
-			expect(mockReadFile).toHaveBeenCalledWith(path.join(TEST_CWD, ".rooignore"), "utf8")
+			// Verify shared utilities were called
+			expect(mockFindIgnoreFiles).toHaveBeenCalledWith(TEST_CWD, ".rooignore")
+			expect(mockCreateRooignoreInstance).toHaveBeenCalledWith(TEST_CWD)
 
 			// Verify content was stored
-			expect(controller.rooIgnoreContent).toBe("node_modules\n.git\nsecrets.json")
+			expect(controller.rooIgnoreContent).toBe("node_modules\n.git\nsecrets.json\ntemp")
 
-			// Test that ignore patterns were applied
+			// Test that ignore patterns from multiple levels were applied
 			expect(controller.validateAccess("node_modules/package.json")).toBe(false)
 			expect(controller.validateAccess("src/app.ts")).toBe(true)
 			expect(controller.validateAccess(".git/config")).toBe(false)
 			expect(controller.validateAccess("secrets.json")).toBe(false)
+			expect(controller.validateAccess("temp/cache.txt")).toBe(false)
 		})
 
 		/**
 		 * Tests the controller behavior when .rooignore doesn't exist
 		 */
-		it("should allow all access when .rooignore doesn't exist", async () => {
-			// Setup mocks to simulate missing .rooignore file
-			mockFileExists.mockResolvedValue(false)
+		it("should allow all access when no .rooignore files exist", async () => {
+			// Setup mocks to simulate no .rooignore files
+			mockFindIgnoreFiles.mockResolvedValue([])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: undefined,
+			})
 
 			// Initialize controller
 			await controller.initialize()
@@ -117,12 +174,12 @@ describe("RooIgnoreController", () => {
 		/**
 		 * Tests the file watcher setup
 		 */
-		it("should set up file watcher for .rooignore changes", async () => {
-			// Check that watcher was created with correct pattern
+		it("should set up file watcher for .rooignore changes at any level", async () => {
+			// Check that watcher was created with correct pattern for multi-level watching
 			expect(vscode.workspace.createFileSystemWatcher).toHaveBeenCalledWith(
 				expect.objectContaining({
 					base: TEST_CWD,
-					pattern: ".rooignore",
+					pattern: "**/.rooignore",
 				}),
 			)
 
@@ -136,9 +193,8 @@ describe("RooIgnoreController", () => {
 		 * Tests error handling during initialization
 		 */
 		it("should handle errors when loading .rooignore", async () => {
-			// Setup mocks to simulate error
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockRejectedValue(new Error("Test file read error"))
+			// Setup mocks to simulate error in shared utilities
+			mockFindIgnoreFiles.mockRejectedValue(new Error("Test file read error"))
 
 			// Spy on console.error
 			const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -156,9 +212,30 @@ describe("RooIgnoreController", () => {
 
 	describe("validateAccess", () => {
 		beforeEach(async () => {
-			// Setup .rooignore content
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules\n.git\nsecrets/**\n*.log")
+			// Setup .rooignore content from multiple levels
+			mockFindIgnoreFiles.mockResolvedValue([path.join(TEST_CWD, ".rooignore")])
+
+			const mockIgnoreInstance = {
+				ignores: vi.fn((filePath: string) => {
+					return (
+						filePath.includes("node_modules") ||
+						filePath.includes(".git") ||
+						filePath.includes("secrets/") ||
+						filePath.endsWith(".log")
+					)
+				}),
+				add: vi.fn(),
+				filter: vi.fn(),
+				createFilter: vi.fn(),
+				test: vi.fn(),
+				checkIgnore: vi.fn(),
+			} as any
+
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: mockIgnoreInstance,
+				content: "node_modules\n.git\nsecrets/**\n*.log",
+			})
+
 			await controller.initialize()
 		})
 
@@ -207,9 +284,23 @@ describe("RooIgnoreController", () => {
 		 * Tests the default behavior when no .rooignore exists
 		 */
 		it("should allow all access when no .rooignore content", async () => {
-			// Create a new controller with no .rooignore
-			mockFileExists.mockResolvedValue(false)
+			// Create a new controller with no .rooignore files
 			const emptyController = new RooIgnoreController(TEST_CWD)
+
+			// Reset mocks for this controller
+			mockFindIgnoreFiles.mockResolvedValue([])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: undefined,
+			})
+
 			await emptyController.initialize()
 
 			// All paths should be allowed
@@ -221,9 +312,30 @@ describe("RooIgnoreController", () => {
 
 	describe("validateCommand", () => {
 		beforeEach(async () => {
-			// Setup .rooignore content
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules\n.git\nsecrets/**\n*.log")
+			// Setup .rooignore content using shared utilities
+			mockFindIgnoreFiles.mockResolvedValue([path.join(TEST_CWD, ".rooignore")])
+
+			const mockIgnoreInstance = {
+				ignores: vi.fn((filePath: string) => {
+					return (
+						filePath.includes("node_modules") ||
+						filePath.includes(".git") ||
+						filePath.includes("secrets") ||
+						filePath.endsWith(".log")
+					)
+				}),
+				add: vi.fn(),
+				filter: vi.fn(),
+				createFilter: vi.fn(),
+				test: vi.fn(),
+				checkIgnore: vi.fn(),
+			} as any
+
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: mockIgnoreInstance,
+				content: "node_modules\n.git\nsecrets/**\n*.log",
+			})
+
 			await controller.initialize()
 		})
 
@@ -279,9 +391,23 @@ describe("RooIgnoreController", () => {
 		 * Tests behavior when no .rooignore exists
 		 */
 		it("should allow all commands when no .rooignore exists", async () => {
-			// Create a new controller with no .rooignore
-			mockFileExists.mockResolvedValue(false)
+			// Create a new controller with no .rooignore files
 			const emptyController = new RooIgnoreController(TEST_CWD)
+
+			// Reset mocks for this controller
+			mockFindIgnoreFiles.mockResolvedValue([])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: undefined,
+			})
+
 			await emptyController.initialize()
 
 			// All commands should be allowed
@@ -293,8 +419,29 @@ describe("RooIgnoreController", () => {
 	describe("filterPaths", () => {
 		beforeEach(async () => {
 			// Setup .rooignore content
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules\n.git\nsecrets/**\n*.log")
+			mockFindIgnoreFiles.mockResolvedValue([path.join(TEST_CWD, ".rooignore")])
+
+			const mockIgnoreInstance = {
+				ignores: vi.fn((filePath: string) => {
+					return (
+						filePath.includes("node_modules") ||
+						filePath.includes(".git") ||
+						filePath.includes("secrets") ||
+						filePath.endsWith(".log")
+					)
+				}),
+				add: vi.fn(),
+				filter: vi.fn(),
+				createFilter: vi.fn(),
+				test: vi.fn(),
+				checkIgnore: vi.fn(),
+			} as any
+
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: mockIgnoreInstance,
+				content: "node_modules\n.git\nsecrets/**\n*.log",
+			})
+
 			await controller.initialize()
 		})
 
@@ -357,28 +504,56 @@ describe("RooIgnoreController", () => {
 		/**
 		 * Tests instructions generation with .rooignore
 		 */
-		it("should generate formatted instructions when .rooignore exists", async () => {
-			// Setup .rooignore content
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules\n.git\nsecrets/**")
+		it("should generate formatted instructions when .rooignore files exist", async () => {
+			// Setup .rooignore content from multiple levels
+			mockFindIgnoreFiles.mockResolvedValue([
+				path.join(TEST_CWD, ".rooignore"),
+				path.join(TEST_CWD, "subfolder", ".rooignore"),
+			])
+
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: "node_modules\n.git\nsecrets/**",
+			})
+
 			await controller.initialize()
 
 			const instructions = controller.getInstructions()
 
-			// Verify instruction format
+			// Verify instruction format includes multi-level information
 			expect(instructions).toContain("# .rooignore")
 			expect(instructions).toContain(LOCK_TEXT_SYMBOL)
 			expect(instructions).toContain("node_modules")
 			expect(instructions).toContain(".git")
 			expect(instructions).toContain("secrets/**")
+			expect(instructions).toContain("2 .rooignore files at different levels")
 		})
 
 		/**
 		 * Tests behavior when no .rooignore exists
 		 */
-		it("should return undefined when no .rooignore exists", async () => {
-			// Setup no .rooignore
-			mockFileExists.mockResolvedValue(false)
+		it("should return undefined when no .rooignore files exist", async () => {
+			// Setup no .rooignore files
+			mockFindIgnoreFiles.mockResolvedValue([])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: undefined,
+			})
+
 			await controller.initialize()
 
 			const instructions = controller.getInstructions()
@@ -413,27 +588,39 @@ describe("RooIgnoreController", () => {
 		 * Tests behavior when .rooignore is created
 		 */
 		it("should reload .rooignore when file is created", async () => {
-			// Setup initial state without .rooignore
-			mockFileExists.mockResolvedValue(false)
+			// Setup initial state without .rooignore files
+			mockFindIgnoreFiles.mockResolvedValue([])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: undefined,
+			})
+
 			await controller.initialize()
 
 			// Verify initial state
 			expect(controller.rooIgnoreContent).toBeUndefined()
 			expect(controller.validateAccess("node_modules/package.json")).toBe(true)
 
-			// Setup for the test
-			mockFileExists.mockResolvedValue(false) // Initially no file exists
-
-			// Create and initialize controller with no .rooignore
-			controller = new RooIgnoreController(TEST_CWD)
-			await controller.initialize()
-
-			// Initial state check
-			expect(controller.rooIgnoreContent).toBeUndefined()
-
 			// Now simulate file creation
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules")
+			mockFindIgnoreFiles.mockResolvedValue([path.join(TEST_CWD, ".rooignore")])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn((filePath: string) => filePath.includes("node_modules")),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: "node_modules",
+			})
 
 			// Force reload of .rooignore content manually
 			await controller.initialize()
@@ -450,8 +637,19 @@ describe("RooIgnoreController", () => {
 		 */
 		it("should reload .rooignore when file is changed", async () => {
 			// Setup initial state with .rooignore
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules")
+			mockFindIgnoreFiles.mockResolvedValue([path.join(TEST_CWD, ".rooignore")])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn((filePath: string) => filePath.includes("node_modules")),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: "node_modules",
+			})
+
 			await controller.initialize()
 
 			// Verify initial state
@@ -459,7 +657,19 @@ describe("RooIgnoreController", () => {
 			expect(controller.validateAccess(".git/config")).toBe(true)
 
 			// Simulate file change
-			mockReadFile.mockResolvedValue("node_modules\n.git")
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn(
+						(filePath: string) => filePath.includes("node_modules") || filePath.includes(".git"),
+					),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: "node_modules\n.git",
+			})
 
 			// Instead of relying on the onChange handler, manually reload
 			// This is because the mock watcher doesn't actually trigger the reload in tests
@@ -478,15 +688,37 @@ describe("RooIgnoreController", () => {
 		 */
 		it("should reset when .rooignore is deleted", async () => {
 			// Setup initial state with .rooignore
-			mockFileExists.mockResolvedValue(true)
-			mockReadFile.mockResolvedValue("node_modules")
+			mockFindIgnoreFiles.mockResolvedValue([path.join(TEST_CWD, ".rooignore")])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn((filePath: string) => filePath.includes("node_modules")),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: "node_modules",
+			})
+
 			await controller.initialize()
 
 			// Verify initial state
 			expect(controller.validateAccess("node_modules/package.json")).toBe(false)
 
 			// Simulate file deletion
-			mockFileExists.mockResolvedValue(false)
+			mockFindIgnoreFiles.mockResolvedValue([])
+			mockCreateRooignoreInstance.mockResolvedValue({
+				ignoreInstance: {
+					ignores: vi.fn().mockReturnValue(false),
+					add: vi.fn(),
+					filter: vi.fn(),
+					createFilter: vi.fn(),
+					test: vi.fn(),
+					checkIgnore: vi.fn(),
+				} as any,
+				content: undefined,
+			})
 
 			// Find and trigger the onDelete handler
 			const onDeleteHandler = mockWatcher.onDidDelete.mock.calls[0][0]
