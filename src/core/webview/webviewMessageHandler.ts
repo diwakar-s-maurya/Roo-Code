@@ -1998,6 +1998,10 @@ export const webviewMessageHandler = async (
 					codebaseIndexOpenAiCompatibleBaseUrl: settings.codebaseIndexOpenAiCompatibleBaseUrl,
 					codebaseIndexSearchMaxResults: settings.codebaseIndexSearchMaxResults,
 					codebaseIndexSearchMinScore: settings.codebaseIndexSearchMinScore,
+					codebaseIndexVertexAIProjectId: settings.codebaseIndexVertexAIProjectId,
+					codebaseIndexVertexAIRegion: settings.codebaseIndexVertexAIRegion,
+					codebaseIndexVertexAIJsonCredentials: settings.codebaseIndexVertexAIJsonCredentials,
+					codebaseIndexVertexAIKeyFile: settings.codebaseIndexVertexAIKeyFile,
 				}
 
 				// Save global state first
@@ -2149,7 +2153,6 @@ export const webviewMessageHandler = async (
 			))
 			const hasGeminiApiKey = !!(await provider.context.secrets.get("codebaseIndexGeminiApiKey"))
 			const hasMistralApiKey = !!(await provider.context.secrets.get("codebaseIndexMistralApiKey"))
-
 			provider.postMessageToWebview({
 				type: "codeIndexSecretStatus",
 				values: {

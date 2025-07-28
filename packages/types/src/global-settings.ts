@@ -184,6 +184,7 @@ export const SECRET_STATE_KEYS = [
 	"codebaseIndexOpenAiCompatibleApiKey",
 	"codebaseIndexGeminiApiKey",
 	"codebaseIndexMistralApiKey",
+	// Note: Vertex AI fields are NOT secrets - they are regular config fields
 	"huggingFaceApiKey",
 ] as const satisfies readonly (keyof ProviderSettings)[]
 export type SecretState = Pick<ProviderSettings, (typeof SECRET_STATE_KEYS)[number]>

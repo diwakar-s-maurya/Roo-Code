@@ -56,6 +56,7 @@
 		"mistralApiKeyLabel": "API Key:",
 		"mistralApiKeyPlaceholder": "Enter your Mistral API key",
 		"openaiCompatibleProvider": "OpenAI Compatible",
+		"vertexAIProvider": "GCP Vertex AI",
 		"openAiKeyLabel": "OpenAI API Key",
 		"openAiKeyPlaceholder": "Enter your OpenAI API key",
 		"openAiCompatibleBaseUrlLabel": "Base URL",
@@ -122,7 +123,10 @@
 			"mistralApiKeyRequired": "Mistral API key is required",
 			"ollamaBaseUrlRequired": "Ollama base URL is required",
 			"baseUrlRequired": "Base URL is required",
-			"modelDimensionMinValue": "Model dimension must be greater than 0"
+			"modelDimensionMinValue": "Model dimension must be greater than 0",
+			"vertexAIProjectIdRequired": "Vertex AI Project ID is required",
+			"vertexAIRegionRequired": "Vertex AI Region is required",
+			"vertexAICredentialsRequired": "Vertex AI credentials (JSON or Key File) are required"
 		}
 	},
 	"autoApprove": {

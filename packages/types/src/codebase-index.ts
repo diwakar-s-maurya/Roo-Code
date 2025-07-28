@@ -21,7 +21,9 @@ export const CODEBASE_INDEX_DEFAULTS = {
 export const codebaseIndexConfigSchema = z.object({
 	codebaseIndexEnabled: z.boolean().optional(),
 	codebaseIndexQdrantUrl: z.string().optional(),
-	codebaseIndexEmbedderProvider: z.enum(["openai", "ollama", "openai-compatible", "gemini", "mistral"]).optional(),
+	codebaseIndexEmbedderProvider: z
+		.enum(["openai", "ollama", "openai-compatible", "gemini", "mistral", "vertex-ai"])
+		.optional(),
 	codebaseIndexEmbedderBaseUrl: z.string().optional(),
 	codebaseIndexEmbedderModelId: z.string().optional(),
 	codebaseIndexEmbedderModelDimension: z.number().optional(),
@@ -34,6 +36,10 @@ export const codebaseIndexConfigSchema = z.object({
 	// OpenAI Compatible specific fields
 	codebaseIndexOpenAiCompatibleBaseUrl: z.string().optional(),
 	codebaseIndexOpenAiCompatibleModelDimension: z.number().optional(),
+	codebaseIndexVertexAIProjectId: z.string().optional(),
+	codebaseIndexVertexAIRegion: z.string().optional(),
+	codebaseIndexVertexAIJsonCredentials: z.string().optional(),
+	codebaseIndexVertexAIKeyFile: z.string().optional(),
 })
 
 export type CodebaseIndexConfig = z.infer<typeof codebaseIndexConfigSchema>
@@ -48,6 +54,7 @@ export const codebaseIndexModelsSchema = z.object({
 	"openai-compatible": z.record(z.string(), z.object({ dimension: z.number() })).optional(),
 	gemini: z.record(z.string(), z.object({ dimension: z.number() })).optional(),
 	mistral: z.record(z.string(), z.object({ dimension: z.number() })).optional(),
+	"vertex-ai": z.record(z.string(), z.object({ dimension: z.number() })).optional(),
 })
 
 export type CodebaseIndexModels = z.infer<typeof codebaseIndexModelsSchema>

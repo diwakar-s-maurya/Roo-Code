@@ -40,7 +40,7 @@ import { AlertTriangle } from "lucide-react"
 import { useRooPortal } from "@src/components/ui/hooks/useRooPortal"
 import type { EmbedderProvider } from "@roo/embeddingModels"
 import type { IndexingStatus } from "@roo/ExtensionMessage"
-import { CODEBASE_INDEX_DEFAULTS } from "@roo-code/types"
+import { CODEBASE_INDEX_DEFAULTS, VERTEX_REGIONS } from "@roo-code/types"
 
 // Default URLs for providers
 const DEFAULT_QDRANT_URL = "http://localhost:6333"
@@ -69,6 +69,10 @@ interface LocalCodeIndexSettings {
 	codebaseIndexOpenAiCompatibleApiKey?: string
 	codebaseIndexGeminiApiKey?: string
 	codebaseIndexMistralApiKey?: string
+	codebaseIndexVertexAIProjectId?: string
+	codebaseIndexVertexAIRegion?: string
+	codebaseIndexVertexAIJsonCredentials?: string
+	codebaseIndexVertexAIKeyFile?: string
 }
 
 // Validation schema for codebase index settings
@@ -135,6 +139,22 @@ const createValidationSchema = (provider: EmbedderProvider, t: any) => {
 					.min(1, t("settings:codeIndex.validation.modelSelectionRequired")),
 			})
 
+		case "vertex-ai":
+			return baseSchema.extend({
+				codebaseIndexEmbedderModelId: z
+					.string()
+					.min(1, t("settings:codeIndex.validation.modelSelectionRequired")),
+				codebaseIndexVertexAIProjectId: z
+					.string()
+					.min(1, t("settings:codeIndex.validation.vertexAIProjectIdRequired")),
+				codebaseIndexVertexAIRegion: z
+					.string()
+					.min(1, t("settings:codeIndex.validation.vertexAIRegionRequired")),
+				// Include credential fields in schema but make them optional since they might be placeholders
+				codebaseIndexVertexAIJsonCredentials: z.string().optional(),
+				codebaseIndexVertexAIKeyFile: z.string().optional(),
+			})
+
 		default:
 			return baseSchema
 	}
@@ -179,6 +199,10 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		codebaseIndexOpenAiCompatibleApiKey: "",
 		codebaseIndexGeminiApiKey: "",
 		codebaseIndexMistralApiKey: "",
+		codebaseIndexVertexAIProjectId: "",
+		codebaseIndexVertexAIRegion: "",
+		codebaseIndexVertexAIJsonCredentials: "",
+		codebaseIndexVertexAIKeyFile: "",
 	})
 
 	// Initial settings state - stores the settings when popover opens
@@ -213,7 +237,12 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 				codebaseIndexOpenAiCompatibleApiKey: "",
 				codebaseIndexGeminiApiKey: "",
 				codebaseIndexMistralApiKey: "",
+				codebaseIndexVertexAIProjectId: codebaseIndexConfig.codebaseIndexVertexAIProjectId || "",
+				codebaseIndexVertexAIRegion: codebaseIndexConfig.codebaseIndexVertexAIRegion || "",
+				codebaseIndexVertexAIJsonCredentials: codebaseIndexConfig.codebaseIndexVertexAIJsonCredentials || "",
+				codebaseIndexVertexAIKeyFile: codebaseIndexConfig.codebaseIndexVertexAIKeyFile || "",
 			}
+
 			setInitialSettings(settings)
 			setCurrentSettings(settings)
 
@@ -307,13 +336,14 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 					if (!prev.codebaseIndexMistralApiKey || prev.codebaseIndexMistralApiKey === SECRET_PLACEHOLDER) {
 						updated.codebaseIndexMistralApiKey = secretStatus.hasMistralApiKey ? SECRET_PLACEHOLDER : ""
 					}
+					// Vertex AI fields are NOT secrets - they are regular config fields, so don't update them here
 
 					return updated
 				}
 
 				// Only update settings if we're not in the middle of saving
-				// After save is complete (saved status), we still want to update to maintain consistency
-				if (saveStatus === "idle" || saveStatus === "saved") {
+				// Don't update immediately after save to avoid overwriting user input
+				if (saveStatus === "idle") {
 					setCurrentSettings(updateWithSecrets)
 					setInitialSettings(updateWithSecrets)
 				}
@@ -623,6 +653,9 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 												</SelectItem>
 												<SelectItem value="mistral">
 													{t("settings:codeIndex.mistralProvider")}
+												</SelectItem>
+												<SelectItem value="vertex-ai">
+													{t("settings:codeIndex.vertexAIProvider")}
 												</SelectItem>
 											</SelectContent>
 										</Select>
@@ -971,6 +1004,171 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 												{formErrors.codebaseIndexMistralApiKey && (
 													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
 														{formErrors.codebaseIndexMistralApiKey}
+													</p>
+												)}
+											</div>
+
+											<div className="space-y-2">
+												<label className="text-sm font-medium">
+													{t("settings:codeIndex.modelLabel")}
+												</label>
+												<VSCodeDropdown
+													value={currentSettings.codebaseIndexEmbedderModelId}
+													onChange={(e: any) =>
+														updateSetting("codebaseIndexEmbedderModelId", e.target.value)
+													}
+													className={cn("w-full", {
+														"border-red-500": formErrors.codebaseIndexEmbedderModelId,
+													})}>
+													<VSCodeOption value="" className="p-2">
+														{t("settings:codeIndex.selectModel")}
+													</VSCodeOption>
+													{getAvailableModels().map((modelId) => {
+														const model =
+															codebaseIndexModels?.[
+																currentSettings.codebaseIndexEmbedderProvider
+															]?.[modelId]
+														return (
+															<VSCodeOption key={modelId} value={modelId} className="p-2">
+																{modelId}{" "}
+																{model
+																	? t("settings:codeIndex.modelDimensions", {
+																			dimension: model.dimension,
+																		})
+																	: ""}
+															</VSCodeOption>
+														)
+													})}
+												</VSCodeDropdown>
+												{formErrors.codebaseIndexEmbedderModelId && (
+													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
+														{formErrors.codebaseIndexEmbedderModelId}
+													</p>
+												)}
+											</div>
+										</>
+									)}
+
+									{currentSettings.codebaseIndexEmbedderProvider === "vertex-ai" && (
+										<>
+											<div className="text-sm text-vscode-descriptionForeground mb-4">
+												<div>{t("settings:providers.googleCloudSetup.title")}</div>
+												<div>
+													<VSCodeLink
+														href="https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude#before_you_begin"
+														className="text-sm">
+														{t("settings:providers.googleCloudSetup.step1")}
+													</VSCodeLink>
+												</div>
+												<div>
+													<VSCodeLink
+														href="https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp"
+														className="text-sm">
+														{t("settings:providers.googleCloudSetup.step2")}
+													</VSCodeLink>
+												</div>
+												<div>
+													<VSCodeLink
+														href="https://developers.google.com/workspace/guides/create-credentials?hl=en#service-account"
+														className="text-sm">
+														{t("settings:providers.googleCloudSetup.step3")}
+													</VSCodeLink>
+												</div>
+											</div>
+
+											<div className="space-y-2">
+												<label className="text-sm font-medium">
+													{t("settings:providers.googleCloudCredentials")}
+												</label>
+												<VSCodeTextField
+													value={currentSettings.codebaseIndexVertexAIJsonCredentials || ""}
+													onInput={(e: any) =>
+														updateSetting(
+															"codebaseIndexVertexAIJsonCredentials",
+															e.target.value,
+														)
+													}
+													placeholder={t("settings:placeholders.credentialsJson")}
+													className={cn("w-full", {
+														"border-red-500":
+															formErrors.codebaseIndexVertexAIJsonCredentials,
+													})}
+												/>
+												{formErrors.codebaseIndexVertexAIJsonCredentials && (
+													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
+														{formErrors.codebaseIndexVertexAIJsonCredentials}
+													</p>
+												)}
+											</div>
+
+											<div className="space-y-2">
+												<label className="text-sm font-medium">
+													{t("settings:providers.googleCloudKeyFile")}
+												</label>
+												<VSCodeTextField
+													value={currentSettings.codebaseIndexVertexAIKeyFile || ""}
+													onInput={(e: any) =>
+														updateSetting("codebaseIndexVertexAIKeyFile", e.target.value)
+													}
+													placeholder={t("settings:placeholders.keyFilePath")}
+													className={cn("w-full", {
+														"border-red-500": formErrors.codebaseIndexVertexAIKeyFile,
+													})}
+												/>
+												{formErrors.codebaseIndexVertexAIKeyFile && (
+													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
+														{formErrors.codebaseIndexVertexAIKeyFile}
+													</p>
+												)}
+											</div>
+
+											<div className="space-y-2">
+												<label className="text-sm font-medium">
+													{t("settings:providers.googleCloudProjectId")}
+												</label>
+												<VSCodeTextField
+													value={currentSettings.codebaseIndexVertexAIProjectId || ""}
+													onInput={(e: any) =>
+														updateSetting("codebaseIndexVertexAIProjectId", e.target.value)
+													}
+													placeholder={t("settings:placeholders.projectId")}
+													className={cn("w-full", {
+														"border-red-500": formErrors.codebaseIndexVertexAIProjectId,
+													})}
+												/>
+												{formErrors.codebaseIndexVertexAIProjectId && (
+													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
+														{formErrors.codebaseIndexVertexAIProjectId}
+													</p>
+												)}
+											</div>
+
+											<div className="space-y-2">
+												<label className="text-sm font-medium">
+													{t("settings:providers.googleCloudRegion")}
+												</label>
+												<Select
+													value={currentSettings.codebaseIndexVertexAIRegion || ""}
+													onValueChange={(value) =>
+														updateSetting("codebaseIndexVertexAIRegion", value)
+													}>
+													<SelectTrigger
+														className={cn("w-full", {
+															"border-red-500": formErrors.codebaseIndexVertexAIRegion,
+														})}>
+														<SelectValue placeholder={t("settings:common.select")} />
+													</SelectTrigger>
+													<SelectContent>
+														{VERTEX_REGIONS.map(({ value, label }) => (
+															<SelectItem key={value} value={value}>
+																{label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												{formErrors.codebaseIndexVertexAIRegion && (
+													<p className="text-xs text-vscode-errorForeground mt-1 mb-0">
+														{formErrors.codebaseIndexVertexAIRegion}
 													</p>
 												)}
 											</div>

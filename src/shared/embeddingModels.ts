@@ -2,7 +2,7 @@
  * Defines profiles for different embedding models, including their dimensions.
  */
 
-export type EmbedderProvider = "openai" | "ollama" | "openai-compatible" | "gemini" | "mistral" // Add other providers as needed
+export type EmbedderProvider = "openai" | "ollama" | "openai-compatible" | "gemini" | "mistral" | "vertex-ai" // Add other providers as needed
 
 export interface EmbeddingModelProfile {
 	dimension: number
@@ -52,6 +52,11 @@ export const EMBEDDING_MODEL_PROFILES: EmbeddingModelProfiles = {
 	},
 	mistral: {
 		"codestral-embed-2505": { dimension: 1536, scoreThreshold: 0.4 },
+	},
+	"vertex-ai": {
+		"text-embedding-004": { dimension: 768 },
+		"gemini-embedding-001": { dimension: 3072, scoreThreshold: 0.4 },
+		"text-embedding-large-exp-03-07": { dimension: 3072, scoreThreshold: 0.4 },
 	},
 }
 
@@ -142,6 +147,9 @@ export function getDefaultModelId(provider: EmbedderProvider): string {
 
 		case "mistral":
 			return "codestral-embed-2505"
+
+		case "vertex-ai":
+			return "gemini-embedding-001"
 
 		default:
 			// Fallback for unknown providers

@@ -4,6 +4,7 @@ import { CodeIndexOllamaEmbedder } from "./embedders/ollama"
 import { OpenAICompatibleEmbedder } from "./embedders/openai-compatible"
 import { GeminiEmbedder } from "./embedders/gemini"
 import { MistralEmbedder } from "./embedders/mistral"
+import { VertexAIEmbedder } from "./embedders/vertex-ai"
 import { EmbedderProvider, getDefaultModelId, getModelDimension } from "../../shared/embeddingModels"
 import { QdrantVectorStore } from "./vector-store/qdrant-client"
 import { codeParser, DirectoryScanner, FileWatcher } from "./processors"
@@ -70,6 +71,31 @@ export class CodeIndexServiceFactory {
 				throw new Error(t("embeddings:serviceFactory.mistralConfigMissing"))
 			}
 			return new MistralEmbedder(config.mistralOptions.apiKey, config.modelId)
+		} else if (provider === "vertex-ai") {
+			if (!config.vertexAIOptions) {
+				throw new Error(t("embeddings:serviceFactory.vertexAIConfigMissing"))
+			}
+
+			// Check if required fields are provided
+			const hasProjectId =
+				config.vertexAIOptions.vertexProjectId && config.vertexAIOptions.vertexProjectId.trim() !== ""
+			const hasRegion = config.vertexAIOptions.vertexRegion && config.vertexAIOptions.vertexRegion.trim() !== ""
+
+			if (!hasProjectId || !hasRegion) {
+				throw new Error(t("embeddings:serviceFactory.vertexAIRequiredFieldsMissing"))
+			}
+
+			// Check if at least one authentication method is available
+			const hasJsonCredentials =
+				config.vertexAIOptions.vertexJsonCredentials &&
+				config.vertexAIOptions.vertexJsonCredentials.trim() !== ""
+			const hasKeyFile =
+				config.vertexAIOptions.vertexKeyFile && config.vertexAIOptions.vertexKeyFile.trim() !== ""
+
+			if (!hasJsonCredentials && !hasKeyFile) {
+				throw new Error(t("embeddings:serviceFactory.vertexAIAuthMissing"))
+			}
+			return new VertexAIEmbedder(config.vertexAIOptions, config.modelId)
 		}
 
 		throw new Error(

@@ -248,13 +248,18 @@ export interface WebviewMessage {
 		// Global state settings
 		codebaseIndexEnabled: boolean
 		codebaseIndexQdrantUrl: string
-		codebaseIndexEmbedderProvider: "openai" | "ollama" | "openai-compatible" | "gemini" | "mistral"
+		codebaseIndexEmbedderProvider: "openai" | "ollama" | "openai-compatible" | "gemini" | "mistral" | "vertex-ai"
 		codebaseIndexEmbedderBaseUrl?: string
 		codebaseIndexEmbedderModelId: string
 		codebaseIndexEmbedderModelDimension?: number // Generic dimension for all providers
 		codebaseIndexOpenAiCompatibleBaseUrl?: string
 		codebaseIndexSearchMaxResults?: number
 		codebaseIndexSearchMinScore?: number
+		// Vertex AI embedder-specific fields (NOT secrets, regular config)
+		codebaseIndexVertexAIProjectId?: string
+		codebaseIndexVertexAIRegion?: string
+		codebaseIndexVertexAIJsonCredentials?: string
+		codebaseIndexVertexAIKeyFile?: string
 
 		// Secret settings
 		codeIndexOpenAiKey?: string

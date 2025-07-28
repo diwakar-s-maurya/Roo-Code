@@ -19,6 +19,12 @@ export class CodeIndexConfigManager {
 	private openAiCompatibleOptions?: { baseUrl: string; apiKey: string }
 	private geminiOptions?: { apiKey: string }
 	private mistralOptions?: { apiKey: string }
+	private vertexAIOptions?: {
+		vertexProjectId?: string
+		vertexRegion?: string
+		vertexJsonCredentials?: string
+		vertexKeyFile?: string
+	}
 	private qdrantUrl?: string = "http://localhost:6333"
 	private qdrantApiKey?: string
 	private searchMinScore?: number
@@ -69,6 +75,9 @@ export class CodeIndexConfigManager {
 		const openAiCompatibleApiKey = this.contextProxy?.getSecret("codebaseIndexOpenAiCompatibleApiKey") ?? ""
 		const geminiApiKey = this.contextProxy?.getSecret("codebaseIndexGeminiApiKey") ?? ""
 		const mistralApiKey = this.contextProxy?.getSecret("codebaseIndexMistralApiKey") ?? ""
+		// Vertex AI fields are now regular config, not secrets
+		const vertexAIJsonCredentials = codebaseIndexConfig.codebaseIndexVertexAIJsonCredentials ?? ""
+		const vertexAIKeyFile = codebaseIndexConfig.codebaseIndexVertexAIKeyFile ?? ""
 
 		// Update instance variables with configuration
 		this.codebaseIndexEnabled = codebaseIndexEnabled ?? true
@@ -104,6 +113,8 @@ export class CodeIndexConfigManager {
 			this.embedderProvider = "gemini"
 		} else if (codebaseIndexEmbedderProvider === "mistral") {
 			this.embedderProvider = "mistral"
+		} else if (codebaseIndexEmbedderProvider === "vertex-ai") {
+			this.embedderProvider = "vertex-ai"
 		} else {
 			this.embedderProvider = "openai"
 		}
@@ -124,6 +135,25 @@ export class CodeIndexConfigManager {
 
 		this.geminiOptions = geminiApiKey ? { apiKey: geminiApiKey } : undefined
 		this.mistralOptions = mistralApiKey ? { apiKey: mistralApiKey } : undefined
+
+		// Only load Vertex AI configuration if the provider is vertex-ai
+		if (this.embedderProvider === "vertex-ai") {
+			// Get embedder-specific Vertex AI configuration
+			const vertexProjectId = codebaseIndexConfig.codebaseIndexVertexAIProjectId ?? ""
+			const vertexRegion = codebaseIndexConfig.codebaseIndexVertexAIRegion ?? ""
+
+			this.vertexAIOptions =
+				vertexProjectId || vertexRegion || vertexAIJsonCredentials || vertexAIKeyFile
+					? {
+							vertexProjectId: vertexProjectId || undefined,
+							vertexRegion: vertexRegion || undefined,
+							vertexJsonCredentials: vertexAIJsonCredentials || undefined,
+							vertexKeyFile: vertexAIKeyFile || undefined,
+						}
+					: undefined
+		} else {
+			this.vertexAIOptions = undefined
+		}
 	}
 
 	/**
@@ -141,6 +171,12 @@ export class CodeIndexConfigManager {
 			openAiCompatibleOptions?: { baseUrl: string; apiKey: string }
 			geminiOptions?: { apiKey: string }
 			mistralOptions?: { apiKey: string }
+			vertexAIOptions?: {
+				vertexProjectId?: string
+				vertexRegion?: string
+				vertexJsonCredentials?: string
+				vertexKeyFile?: string
+			}
 			qdrantUrl?: string
 			qdrantApiKey?: string
 			searchMinScore?: number
@@ -160,6 +196,10 @@ export class CodeIndexConfigManager {
 			openAiCompatibleApiKey: this.openAiCompatibleOptions?.apiKey ?? "",
 			geminiApiKey: this.geminiOptions?.apiKey ?? "",
 			mistralApiKey: this.mistralOptions?.apiKey ?? "",
+			vertexAIProjectId: this.vertexAIOptions?.vertexProjectId ?? "",
+			vertexAIRegion: this.vertexAIOptions?.vertexRegion ?? "",
+			vertexAIJsonCredentials: this.vertexAIOptions?.vertexJsonCredentials ?? "",
+			vertexAIKeyFile: this.vertexAIOptions?.vertexKeyFile ?? "",
 			qdrantUrl: this.qdrantUrl ?? "",
 			qdrantApiKey: this.qdrantApiKey ?? "",
 		}
@@ -184,6 +224,7 @@ export class CodeIndexConfigManager {
 				openAiCompatibleOptions: this.openAiCompatibleOptions,
 				geminiOptions: this.geminiOptions,
 				mistralOptions: this.mistralOptions,
+				vertexAIOptions: this.vertexAIOptions,
 				qdrantUrl: this.qdrantUrl,
 				qdrantApiKey: this.qdrantApiKey,
 				searchMinScore: this.currentSearchMinScore,
@@ -221,6 +262,12 @@ export class CodeIndexConfigManager {
 			const qdrantUrl = this.qdrantUrl
 			const isConfigured = !!(apiKey && qdrantUrl)
 			return isConfigured
+		} else if (this.embedderProvider === "vertex-ai") {
+			const hasVertexAuth = !!(this.vertexAIOptions?.vertexJsonCredentials || this.vertexAIOptions?.vertexKeyFile)
+			const hasRequiredFields = !!(this.vertexAIOptions?.vertexProjectId && this.vertexAIOptions?.vertexRegion)
+			const qdrantUrl = this.qdrantUrl
+			const isConfigured = !!(hasVertexAuth && hasRequiredFields && qdrantUrl)
+			return isConfigured
 		}
 		return false // Should not happen if embedderProvider is always set correctly
 	}
@@ -255,6 +302,10 @@ export class CodeIndexConfigManager {
 		const prevModelDimension = prev?.modelDimension
 		const prevGeminiApiKey = prev?.geminiApiKey ?? ""
 		const prevMistralApiKey = prev?.mistralApiKey ?? ""
+		const prevVertexAIProjectId = prev?.vertexAIProjectId ?? ""
+		const prevVertexAIRegion = prev?.vertexAIRegion ?? ""
+		const prevVertexAIJsonCredentials = prev?.vertexAIJsonCredentials ?? ""
+		const prevVertexAIKeyFile = prev?.vertexAIKeyFile ?? ""
 		const prevQdrantUrl = prev?.qdrantUrl ?? ""
 		const prevQdrantApiKey = prev?.qdrantApiKey ?? ""
 
@@ -292,6 +343,10 @@ export class CodeIndexConfigManager {
 		const currentModelDimension = this.modelDimension
 		const currentGeminiApiKey = this.geminiOptions?.apiKey ?? ""
 		const currentMistralApiKey = this.mistralOptions?.apiKey ?? ""
+		const currentVertexAIProjectId = this.vertexAIOptions?.vertexProjectId ?? ""
+		const currentVertexAIRegion = this.vertexAIOptions?.vertexRegion ?? ""
+		const currentVertexAIJsonCredentials = this.vertexAIOptions?.vertexJsonCredentials ?? ""
+		const currentVertexAIKeyFile = this.vertexAIOptions?.vertexKeyFile ?? ""
 		const currentQdrantUrl = this.qdrantUrl ?? ""
 		const currentQdrantApiKey = this.qdrantApiKey ?? ""
 
@@ -315,6 +370,15 @@ export class CodeIndexConfigManager {
 		}
 
 		if (prevMistralApiKey !== currentMistralApiKey) {
+			return true
+		}
+
+		if (
+			prevVertexAIProjectId !== currentVertexAIProjectId ||
+			prevVertexAIRegion !== currentVertexAIRegion ||
+			prevVertexAIJsonCredentials !== currentVertexAIJsonCredentials ||
+			prevVertexAIKeyFile !== currentVertexAIKeyFile
+		) {
 			return true
 		}
 
@@ -375,6 +439,7 @@ export class CodeIndexConfigManager {
 			openAiCompatibleOptions: this.openAiCompatibleOptions,
 			geminiOptions: this.geminiOptions,
 			mistralOptions: this.mistralOptions,
+			vertexAIOptions: this.vertexAIOptions,
 			qdrantUrl: this.qdrantUrl,
 			qdrantApiKey: this.qdrantApiKey,
 			searchMinScore: this.currentSearchMinScore,

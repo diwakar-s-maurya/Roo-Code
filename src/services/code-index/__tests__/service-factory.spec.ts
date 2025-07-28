@@ -4,6 +4,7 @@ import { OpenAiEmbedder } from "../embedders/openai"
 import { CodeIndexOllamaEmbedder } from "../embedders/ollama"
 import { OpenAICompatibleEmbedder } from "../embedders/openai-compatible"
 import { GeminiEmbedder } from "../embedders/gemini"
+import { VertexAIEmbedder } from "../embedders/vertex-ai"
 import { QdrantVectorStore } from "../vector-store/qdrant-client"
 
 // Mock the embedders and vector store
@@ -11,6 +12,7 @@ vitest.mock("../embedders/openai")
 vitest.mock("../embedders/ollama")
 vitest.mock("../embedders/openai-compatible")
 vitest.mock("../embedders/gemini")
+vitest.mock("../embedders/vertex-ai")
 vitest.mock("../vector-store/qdrant-client")
 
 // Mock the embedding models module
@@ -32,6 +34,7 @@ const MockedOpenAiEmbedder = OpenAiEmbedder as MockedClass<typeof OpenAiEmbedder
 const MockedCodeIndexOllamaEmbedder = CodeIndexOllamaEmbedder as MockedClass<typeof CodeIndexOllamaEmbedder>
 const MockedOpenAICompatibleEmbedder = OpenAICompatibleEmbedder as MockedClass<typeof OpenAICompatibleEmbedder>
 const MockedGeminiEmbedder = GeminiEmbedder as MockedClass<typeof GeminiEmbedder>
+const MockedVertexAIEmbedder = VertexAIEmbedder as MockedClass<typeof VertexAIEmbedder>
 const MockedQdrantVectorStore = QdrantVectorStore as MockedClass<typeof QdrantVectorStore>
 
 // Import the mocked functions
@@ -326,6 +329,69 @@ describe("CodeIndexServiceFactory", () => {
 			expect(() => factory.createEmbedder()).toThrow("serviceFactory.geminiConfigMissing")
 		})
 
+		it("should create VertexAIEmbedder with default model when no modelId specified", () => {
+			// Arrange
+			const testConfig = {
+				embedderProvider: "vertex-ai",
+				vertexAIOptions: {
+					vertexProjectId: "test-project",
+					vertexRegion: "us-central1",
+				},
+			}
+			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
+
+			// Act
+			factory.createEmbedder()
+
+			// Assert
+			expect(MockedVertexAIEmbedder).toHaveBeenCalledWith(
+				{
+					vertexProjectId: "test-project",
+					vertexRegion: "us-central1",
+				},
+				undefined,
+			)
+		})
+
+		it("should create VertexAIEmbedder with specified modelId", () => {
+			// Arrange
+			const testConfig = {
+				embedderProvider: "vertex-ai",
+				modelId: "text-embedding-004",
+				vertexAIOptions: {
+					vertexProjectId: "test-project",
+					vertexRegion: "us-central1",
+					vertexJsonCredentials: "test-credentials",
+				},
+			}
+			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
+
+			// Act
+			factory.createEmbedder()
+
+			// Assert
+			expect(MockedVertexAIEmbedder).toHaveBeenCalledWith(
+				{
+					vertexProjectId: "test-project",
+					vertexRegion: "us-central1",
+					vertexJsonCredentials: "test-credentials",
+				},
+				"text-embedding-004",
+			)
+		})
+
+		it("should throw error when Vertex AI options are missing", () => {
+			// Arrange
+			const testConfig = {
+				embedderProvider: "vertex-ai",
+				vertexAIOptions: undefined,
+			}
+			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
+
+			// Act & Assert
+			expect(() => factory.createEmbedder()).toThrow("serviceFactory.vertexAIConfigMissing")
+		})
+
 		it("should throw error for invalid embedder provider", () => {
 			// Arrange
 			const testConfig = {
@@ -606,6 +672,55 @@ describe("CodeIndexServiceFactory", () => {
 			)
 		})
 
+		it("should use model-specific dimension for Vertex AI provider", () => {
+			// Arrange
+			const testConfig = {
+				embedderProvider: "vertex-ai",
+				modelId: "gemini-embedding-001",
+				qdrantUrl: "http://localhost:6333",
+				qdrantApiKey: "test-key",
+			}
+			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
+			mockGetModelDimension.mockReturnValue(3072)
+
+			// Act
+			factory.createVectorStore()
+
+			// Assert
+			expect(mockGetModelDimension).toHaveBeenCalledWith("vertex-ai", "gemini-embedding-001")
+			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
+				"/test/workspace",
+				"http://localhost:6333",
+				3072,
+				"test-key",
+			)
+		})
+
+		it("should use default model dimension for Vertex AI when modelId not specified", () => {
+			// Arrange
+			const testConfig = {
+				embedderProvider: "vertex-ai",
+				qdrantUrl: "http://localhost:6333",
+				qdrantApiKey: "test-key",
+			}
+			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
+			mockGetDefaultModelId.mockReturnValue("gemini-embedding-001")
+			mockGetModelDimension.mockReturnValue(3072)
+
+			// Act
+			factory.createVectorStore()
+
+			// Assert
+			expect(mockGetDefaultModelId).toHaveBeenCalledWith("vertex-ai")
+			expect(mockGetModelDimension).toHaveBeenCalledWith("vertex-ai", "gemini-embedding-001")
+			expect(MockedQdrantVectorStore).toHaveBeenCalledWith(
+				"/test/workspace",
+				"http://localhost:6333",
+				3072,
+				"test-key",
+			)
+		})
+
 		it("should use default model when config.modelId is undefined", () => {
 			// Arrange
 			const testConfig = {
@@ -774,6 +889,28 @@ describe("CodeIndexServiceFactory", () => {
 			}
 			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
 			MockedGeminiEmbedder.mockImplementation(() => mockEmbedderInstance)
+			mockEmbedderInstance.validateConfiguration.mockResolvedValue({ valid: true })
+
+			// Act
+			const embedder = factory.createEmbedder()
+			const result = await factory.validateEmbedder(embedder)
+
+			// Assert
+			expect(result).toEqual({ valid: true })
+			expect(mockEmbedderInstance.validateConfiguration).toHaveBeenCalled()
+		})
+
+		it("should validate Vertex AI embedder successfully", async () => {
+			// Arrange
+			const testConfig = {
+				embedderProvider: "vertex-ai",
+				vertexAIOptions: {
+					vertexProjectId: "test-project",
+					vertexRegion: "us-central1",
+				},
+			}
+			mockConfigManager.getConfig.mockReturnValue(testConfig as any)
+			MockedVertexAIEmbedder.mockImplementation(() => mockEmbedderInstance)
 			mockEmbedderInstance.validateConfiguration.mockResolvedValue({ valid: true })
 
 			// Act

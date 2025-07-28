@@ -1554,6 +1554,12 @@ export class ClineProvider
 				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
 				codebaseIndexSearchMaxResults: codebaseIndexConfig?.codebaseIndexSearchMaxResults,
 				codebaseIndexSearchMinScore: codebaseIndexConfig?.codebaseIndexSearchMinScore,
+				// Vertex AI embedder-specific fields
+				codebaseIndexVertexAIProjectId: (codebaseIndexConfig as any)?.codebaseIndexVertexAIProjectId ?? "",
+				codebaseIndexVertexAIRegion: (codebaseIndexConfig as any)?.codebaseIndexVertexAIRegion ?? "",
+				codebaseIndexVertexAIJsonCredentials:
+					(codebaseIndexConfig as any)?.codebaseIndexVertexAIJsonCredentials ?? "",
+				codebaseIndexVertexAIKeyFile: (codebaseIndexConfig as any)?.codebaseIndexVertexAIKeyFile ?? "",
 			},
 			mdmCompliant: this.checkMdmCompliance(),
 			profileThresholds: profileThresholds ?? {},
@@ -1726,6 +1732,12 @@ export class ClineProvider
 					stateValues.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
 				codebaseIndexSearchMaxResults: stateValues.codebaseIndexConfig?.codebaseIndexSearchMaxResults,
 				codebaseIndexSearchMinScore: stateValues.codebaseIndexConfig?.codebaseIndexSearchMinScore,
+				// Vertex AI embedder-specific fields
+				codebaseIndexVertexAIProjectId: stateValues.codebaseIndexConfig?.codebaseIndexVertexAIProjectId ?? "",
+				codebaseIndexVertexAIRegion: stateValues.codebaseIndexConfig?.codebaseIndexVertexAIRegion ?? "",
+				codebaseIndexVertexAIJsonCredentials:
+					stateValues.codebaseIndexConfig?.codebaseIndexVertexAIJsonCredentials ?? "",
+				codebaseIndexVertexAIKeyFile: stateValues.codebaseIndexConfig?.codebaseIndexVertexAIKeyFile ?? "",
 			},
 			profileThresholds: stateValues.profileThresholds ?? {},
 			// Add diagnostic message settings
